@@ -15,6 +15,7 @@ void csh_loop();
 int csh_execute(char**);
 int csh_launch(char**);
 int csh_exit();
+int csh_cd();
 
 //Global variables
 const char *built_in_strs[] = {"exit", "cd"};
@@ -23,6 +24,7 @@ char *line;
 //Function pointer to built in commands (exit, echo)
 int (*built_in_func[]) (char**) = {
     &csh_exit,
+    &csh_cd
 };
 
 //Built in function exit. This function exits the shell
@@ -33,43 +35,91 @@ int csh_exit() {
 }
 
 int csh_cd() {
-    
-    char *first_token;
+     
     char *rest_of_line;
-    char cwd[PATH_MAX - 1];
-    
-    first_token = strtok(line, DELIMS);
+    char cwd[PATH_MAX];
+    int bufsize = 64;
+    char **tokens = malloc(bufsize * sizeof(char*));    
+    char *token;
+    int position = 0;
+    char new_cwd[PATH_MAX] = "";
+
+    strtok(line, DELIMS);
 
     rest_of_line = strtok(NULL, DELIMS);
 
     if (getcwd(cwd, sizeof(cwd)) != NULL) {
         
-        if (!(((strlen(cwd) + 1) + (strlen(rest_of_line))) > (PATH_MAX - 1))) {
-                        
-            for (int i = strlen(cwd) + 1; i < strlen(rest_of_line); i++) {
+        int len = strlen(cwd);
+        
+        if (strcmp(rest_of_line, "..") == 0) {
             
-                int j = 0;    
-                cwd[i] = rest_of_line[j];
-                j++;
+            token = strtok(cwd, "/");
+
+            if (token == NULL) {
+                perror("Error cannot find parent directory");
+                free(tokens);
+                return 1;
+            }
+            
+            while (token != NULL) {
+                
+                tokens[position] = token;
+
+                if (position >= bufsize) {
+                    bufsize *= 2;
+                    tokens = realloc(tokens, bufsize * sizeof(char*));
+
+                    if (tokens == NULL) {
+                        perror("Error allocating memory");
+                        free(tokens);
+                        return 1;
+                    }
+                }
+
+                position++;
+                token = strtok(NULL, "/");
+            }
+
+            tokens[position - 1] = NULL;
+            int i = 0;
+            strcat(new_cwd, tokens[i]);
+            i++;
+            
+            while (tokens[i] != NULL) {
+                
+                strcat(new_cwd, "/");
+                strcat(new_cwd, tokens[i]);
+                i++;
 
             }
-            cwd[strlen(cwd) + 1] = '\0';
-            if (chdir(cwd) != -1) {
+            
+            if (chdir(new_cwd) == -1) {
                 perror("Error finding directory");
-                exit(EXIT_FAILURE);
+                free(tokens);
                 return 1;
             } else {
-                exit(EXIT_SUCCESS);
+                free(tokens);
+                return 1;
+            }
+
+        } else if ((len + strlen(rest_of_line) + 1) < (PATH_MAX)) {
+            
+            strcat(cwd, "/");
+            strcat(cwd, rest_of_line);
+                        
+            if (chdir(cwd) == -1) {
+                perror("Error finding directory");
+                return 1;
+            } else {
                 return 1;
             }
         } else {
             printf("Error path size is too large");
-            exit(EXIT_FAILURE);
             return 1;
         }
     } else {
         perror("Error getting directory");
-        exit(EXIT_FAILURE);
         return 1;
     }
 
@@ -114,7 +164,7 @@ char *csh_read_line(void) {
     //Declaring variables
     size_t bufsize = 0;
     char *buffer = NULL;    
-    
+        
     /*
      * Using getline() to dynamically allocate memory
      * to the char pointer, buffer, then checking if
@@ -130,6 +180,7 @@ char *csh_read_line(void) {
             exit(EXIT_FAILURE);
         }
     }
+
     //Return buffer after getline() was used
     return buffer;
 
