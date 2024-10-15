@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <errno.h>
+#include <limits.h>
 
 //Function declerations
 char *csh_read_line(void);
@@ -14,16 +15,14 @@ void csh_loop();
 int csh_execute(char**);
 int csh_launch(char**);
 int csh_exit();
-int csh_echo();
 
 //Global variables
-const char *built_in_strs[] = {"exit", "echo"};
+const char *built_in_strs[] = {"exit", "cd"};
 char *line;
 
 //Function pointer to built in commands (exit, echo)
 int (*built_in_func[]) (char**) = {
     &csh_exit,
-    &csh_echo
 };
 
 //Built in function exit. This function exits the shell
@@ -33,22 +32,46 @@ int csh_exit() {
     
 }
 
-//Built in function echo. This function prints whatever is entered after echo to the terminal
-int csh_echo() {
+int csh_cd() {
     
     char *first_token;
     char *rest_of_line;
-    char *delim = DELIMS;
+    char cwd[PATH_MAX - 1];
+    
+    first_token = strtok(line, DELIMS);
 
-    first_token = strtok(line, delim);
+    rest_of_line = strtok(NULL, DELIMS);
 
-    rest_of_line = strtok(NULL, "");
+    if (getcwd(cwd, sizeof(cwd)) != NULL) {
+        
+        if (!(((strlen(cwd) + 1) + (strlen(rest_of_line))) > (PATH_MAX - 1))) {
+                        
+            for (int i = strlen(cwd) + 1; i < strlen(rest_of_line); i++) {
+            
+                int j = 0;    
+                cwd[i] = rest_of_line[j];
+                j++;
 
-    if (rest_of_line != NULL) {
-        printf("%s", rest_of_line);
+            }
+            cwd[strlen(cwd) + 1] = '\0';
+            if (chdir(cwd) != -1) {
+                perror("Error finding directory");
+                exit(EXIT_FAILURE);
+                return 1;
+            } else {
+                exit(EXIT_SUCCESS);
+                return 1;
+            }
+        } else {
+            printf("Error path size is too large");
+            exit(EXIT_FAILURE);
+            return 1;
+        }
+    } else {
+        perror("Error getting directory");
+        exit(EXIT_FAILURE);
+        return 1;
     }
-
-    return 1;
 
 }
 
@@ -219,8 +242,8 @@ int csh_launch(char **args) {
 int csh_execute(char **args) {
     
     //If the argument entered is empty or failed, then the loop is restarted and input is recieved again
-    if (args[0] == NULL) {
-        return 0;
+    if (args[0] == NULL || *args[0] == '\n') {
+        return 1;
     }
     
     //Checkin whether the command is built in by looping through built_in_strs
