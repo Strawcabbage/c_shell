@@ -105,7 +105,7 @@ void csh_loop(void) {
     //While loop to read read, parse, and execute input
     do {
        
-       printf("> ");
+       printf("%s> ", curr_dir);
 
        line = csh_read_line();
        linecopy = malloc(strlen(line) + 1);
