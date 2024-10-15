@@ -16,9 +16,10 @@ int csh_execute(char**);
 int csh_launch(char**);
 int csh_exit();
 int csh_cd();
+int csh_help();
 
 //Global variables
-const char *built_in_strs[] = {"exit", "cd"};
+const char *built_in_strs[] = {"exit", "cd", "help"};
 char *line;
 char prev_dir[PATH_MAX];
 char curr_dir[PATH_MAX];
@@ -26,7 +27,8 @@ char curr_dir[PATH_MAX];
 //Function pointer to built in commands (exit, echo)
 int (*built_in_func[]) (char**) = {
     &csh_exit,
-    &csh_cd
+    &csh_cd,
+    &csh_help
 };
 
 //Built in function exit. This function exits the shell
@@ -82,6 +84,15 @@ int csh_cd() {
 
     }
 
+}
+
+int csh_help() {
+    
+    printf("Here are a list of the built in functions you can use:\n");
+    for (int i = 0; i < (sizeof(built_in_strs) / sizeof(built_in_strs[0])); i++) {
+        printf("  -  \"%s\"\n", built_in_strs[i]);
+    }
+    return 1;
 }
 
 //Main function which starts the shell input loop function
