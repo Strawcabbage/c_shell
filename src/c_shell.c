@@ -20,6 +20,8 @@ int csh_cd();
 //Global variables
 const char *built_in_strs[] = {"exit", "cd"};
 char *line;
+char prev_dir[PATH_MAX];
+char curr_dir[PATH_MAX];
 
 //Function pointer to built in commands (exit, echo)
 int (*built_in_func[]) (char**) = {
@@ -35,92 +37,49 @@ int csh_exit() {
 }
 
 int csh_cd() {
-     
+    
     char *rest_of_line;
-    char cwd[PATH_MAX];
-    int bufsize = 64;
-    char **tokens = malloc(bufsize * sizeof(char*));    
-    char *token;
-    int position = 0;
-    char new_cwd[PATH_MAX] = "";
-
+    
     strtok(line, DELIMS);
 
     rest_of_line = strtok(NULL, DELIMS);
 
-    if (getcwd(cwd, sizeof(cwd)) != NULL) {
-        
-        int len = strlen(cwd);
-        
-        if (strcmp(rest_of_line, "..") == 0) {
-            
-            token = strtok(cwd, "/");
+    if (rest_of_line == NULL) {
+        perror("Must have file path after command cd");
+        return 1;
+    }
 
-            if (token == NULL) {
-                perror("Error cannot find parent directory");
-                free(tokens);
-                return 1;
-            }
-            
-            while (token != NULL) {
-                
-                tokens[position] = token;
+    if (!(strcmp(rest_of_line, "..") == 0)) {
 
-                if (position >= bufsize) {
-                    bufsize *= 2;
-                    tokens = realloc(tokens, bufsize * sizeof(char*));
+        strcpy(prev_dir, curr_dir);
 
-                    if (tokens == NULL) {
-                        perror("Error allocating memory");
-                        free(tokens);
-                        return 1;
-                    }
-                }
+        strcat(curr_dir, "/");
+        strcat(curr_dir, rest_of_line);
 
-                position++;
-                token = strtok(NULL, "/");
-            }
-
-            tokens[position - 1] = NULL;
-            int i = 0;
-            strcat(new_cwd, tokens[i]);
-            i++;
-            
-            while (tokens[i] != NULL) {
-                
-                strcat(new_cwd, "/");
-                strcat(new_cwd, tokens[i]);
-                i++;
-
-            }
-            
-            if (chdir(new_cwd) == -1) {
-                perror("Error finding directory");
-                free(tokens);
-                return 1;
-            } else {
-                free(tokens);
-                return 1;
-            }
-
-        } else if ((len + strlen(rest_of_line) + 1) < (PATH_MAX)) {
-            
-            strcat(cwd, "/");
-            strcat(cwd, rest_of_line);
-                        
-            if (chdir(cwd) == -1) {
-                perror("Error finding directory");
-                return 1;
-            } else {
-                return 1;
-            }
+        if (chdir(curr_dir) == -1) {
+            perror("Error: cannot find directory");
+            return 1;
         } else {
-            printf("Error path size is too large");
             return 1;
         }
+
     } else {
-        perror("Error getting directory");
-        return 1;
+        
+        if (prev_dir != NULL) {
+            
+            if (chdir(prev_dir) == -1) {
+                perror("Failed to return to previous directory");
+                return 1;
+            } else {
+                strcpy(curr_dir, prev_dir);
+                return 1;
+            }
+
+        } else {
+            perror("Cannot move back directories any further");
+            return 1;
+        }
+
     }
 
 }
@@ -138,6 +97,10 @@ void csh_loop(void) {
     char **args;
     int status;
     char *linecopy;
+    
+    if (getcwd(curr_dir, sizeof(curr_dir)) == NULL) {
+        perror("Unable to locate filepath to current directory");
+    }
 
     //While loop to read read, parse, and execute input
     do {
@@ -149,7 +112,7 @@ void csh_loop(void) {
        args = csh_parse_line(line, linecopy);
        status = csh_execute(args);
        
-       //Freeing memory allocated to args and line to prevent memory leaks before looping again or exiting
+       //Freeing memory allocated to args and lines to prevent memory leaks before looping again or exiting
        free(line);
        free(args);
        free(linecopy);
