@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 #define DELIMS " /\r\a\t\n" 
+#define MAX_HISTORY 100
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,6 +8,7 @@
 #include <sys/wait.h>
 #include <errno.h>
 #include <limits.h>
+#include <termios.h>
 
 //Function declerations
 char *csh_read_line(void);
@@ -14,6 +16,9 @@ char **csh_parse_line(char*, char*);
 void csh_loop();
 int csh_execute(char**);
 int csh_launch(char**);
+void enableRawMode();
+void disableRawMode();
+void addToHistory(const char *);
 int csh_exit();
 int csh_cd();
 int csh_help();
@@ -23,6 +28,9 @@ const char *built_in_strs[] = {"exit", "cd", "help"};
 char *line;
 char prev_dir[PATH_MAX];
 char curr_dir[PATH_MAX];
+int curr_hist_index = -1;
+char *history[MAX_HISTORY];
+int history_count = 0;
 
 //Function pointer to built in commands (exit, echo)
 int (*built_in_func[]) (char**) = {
@@ -87,7 +95,6 @@ int csh_cd() {
 }
 
 int csh_help() {
-    
     printf("Here are a list of the built in functions you can use:\n");
     for (int i = 0; i < (sizeof(built_in_strs) / sizeof(built_in_strs[0])); i++) {
         printf("  -  \"%s\"\n", built_in_strs[i]);
@@ -95,11 +102,14 @@ int csh_help() {
     return 1;
 }
 
+
+
 //Main function which starts the shell input loop function
 int main(int argc, char **argv) {
     
     csh_loop();
     return 0;
+
 }
 
 //The shell loop function which loops through recieving and reading input until there is a request to exit
@@ -138,7 +148,10 @@ char *csh_read_line(void) {
     //Declaring variables
     size_t bufsize = 0;
     char *buffer = NULL;    
-        
+
+
+    //enableRawMode();
+
     /*
      * Using getline() to dynamically allocate memory
      * to the char pointer, buffer, then checking if
@@ -154,6 +167,8 @@ char *csh_read_line(void) {
             exit(EXIT_FAILURE);
         }
     }
+    
+    //disableRawMode();
 
     //Return buffer after getline() was used
     return buffer;
@@ -259,6 +274,62 @@ int csh_launch(char **args) {
     return 1;
 }
 
+char **csh_read_file_input(char **args) {
+    
+    FILE *file;
+    char buffer[256];
+    char **strs;
+    char *str;
+    int position = 0;
+
+    file = fopen(args[2], "r");
+    if (file == NULL) {
+        perror("Error opening file");
+        return NULL;
+    }
+
+    if (fgets(buffer, sizeof(buffer), file) != NULL) {
+        if (feof(file)) {
+            
+            fclose(file);
+            
+            strs = malloc(sizeof(buffer) * sizeof(char));
+
+            if (strs == NULL) {
+                perror("Error allocating memory");
+            }
+
+            str = strtok(buffer, DELIMS);
+
+            while (str != NULL) {
+
+                strs[position] = str;
+
+                if (position >= 256) {
+                    perror("Text file is to large");
+                }
+
+                str = strtok(NULL, DELIMS);
+                position++;
+
+            }
+            
+            strs[position] = NULL;
+            return strs;
+
+        } else {
+            perror("Error getting text from file");
+            fclose(file);
+            return NULL;
+        }
+    } else {
+        perror("Error getting text from file");
+        fclose(file);
+        return NULL;
+    }
+
+}
+
 /*
  * Function for deciding whether a command is for a built in
  * function or a system command by using built_in_strs
@@ -271,6 +342,10 @@ int csh_execute(char **args) {
         return 1;
     }
     
+    if (strcmp(args[0], "command") == 0) {
+        return csh_launch(csh_read_file_input(args));
+    }
+
     //Checkin whether the command is built in by looping through built_in_strs
     for (int i = 0; i < (sizeof(built_in_strs) / sizeof(built_in_strs[0])); i++) {
         if (strcmp(args[0], built_in_strs[i]) == 0) {
@@ -282,3 +357,27 @@ int csh_execute(char **args) {
     return csh_launch(args);
 }
 
+void addToHistory(const char *cmd) {
+    if (history_count < MAX_HISTORY) {
+        history[history_count] = strdup(cmd);
+        history_count++;
+    } else {
+        perror("Max history count exceeded, please restart shell");
+    }
+    curr_hist_index = history_count;
+}
+
+void enableRawMode() {
+    struct termios raw;
+    tcgetattr(STDIN_FILENO, &raw);
+    raw.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+}
+
+
+void disableRawMode() {
+    struct termios raw;
+    tcgetattr(STDIN_FILENO, &raw);
+    raw.c_lflag |= ICANON | ECHO;
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+}
