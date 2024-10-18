@@ -9,6 +9,9 @@
 #include <errno.h>
 #include <limits.h>
 #include <termios.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 //Function declerations
 char *csh_read_line(void);
@@ -31,6 +34,8 @@ char curr_dir[PATH_MAX];
 int curr_hist_index = -1;
 char *history[MAX_HISTORY];
 int history_count = 0;
+int in = 0;
+int out = 0;
 
 //Function pointer to built in commands (exit, echo)
 int (*built_in_func[]) (char**) = {
@@ -247,7 +252,27 @@ int csh_launch(char **args) {
     //Declaring variables
     pid_t pid, wpid;
     int status;
+    int status_code;
+    int position = 0;
+    char **strs;
+    char *str;
+    char *input;
+
+
+    strs = malloc(2 * sizeof(char*));
+
+    if (strs == NULL) {
+        perror("Error allocating memory");
+        free(strs);
+        return 1;
+    }
+
+    str = strtok(line, "<>");
+    strs[0] = str;
+    str = strtok(NULL, "<>");
+    strs[1] = str;
     
+
     //Forking the parent proccess into a child and the parent
     pid = fork();
     
@@ -259,14 +284,37 @@ int csh_launch(char **args) {
     if (pid<0) {
         perror("Fork fail");
         exit(EXIT_FAILURE);
+        free(strs);
+        return 1;
     } else if (pid == 0) {
-        int status_code = execvp(args[0], args);
+
+        if (in) {
+            int fd0 = open(strs[1], O_RDONLY);
+            dup2(fd0, STDIN_FILENO);
+            close(fd0);
+            in = 0;
+        }
+        if (out) {
+            while (!(strcmp(args[position], ">") == 0)) {
+                position++;
+            }
+            while (args[position] != NULL) {
+                args[position] = NULL;
+                position++;
+            }
+            int fd1 = creat(strs[1], 0644);
+            dup2(fd1, STDOUT_FILENO);
+            close(fd1);
+            out = 0;
+        }
+        free(strs);
+        status_code = execvp(args[0], args);
         if (status_code == -1) {
             perror("Process did not execute");
         }
         exit(EXIT_FAILURE);
-    } else {
-          
+
+    } else {  
         do { 
             wpid = waitpid(pid, &status, WUNTRACED);
         } while (!WIFEXITED(status) && !WIFSIGNALED(status));
@@ -274,78 +322,29 @@ int csh_launch(char **args) {
     return 1;
 }
 
-char **csh_read_file_input(char **args) {
-    
-    FILE *file;
-    char buffer[256];
-    char **strs;
-    char *str;
-    int position = 0;
-
-    file = fopen(args[2], "r");
-    if (file == NULL) {
-        perror("Error opening file");
-        return NULL;
-    }
-
-    if (fgets(buffer, sizeof(buffer), file) != NULL) {
-        if (feof(file)) {
-            
-            fclose(file);
-            
-            strs = malloc(sizeof(buffer) * sizeof(char));
-
-            if (strs == NULL) {
-                perror("Error allocating memory");
-            }
-
-            str = strtok(buffer, DELIMS);
-
-            while (str != NULL) {
-
-                strs[position] = str;
-
-                if (position >= 256) {
-                    perror("Text file is to large");
-                }
-
-                str = strtok(NULL, DELIMS);
-                position++;
-
-            }
-            
-            strs[position] = NULL;
-            return strs;
-
-        } else {
-            perror("Error getting text from file");
-            fclose(file);
-            return NULL;
-        }
-    } else {
-        perror("Error getting text from file");
-        fclose(file);
-        return NULL;
-    }
-
-}
-
-/*
- * Function for deciding whether a command is for a built in
+/* The function for deciding whether a command is for a built in
  * function or a system command by using built_in_strs
  * then returning a status after checking
 */
 int csh_execute(char **args) {
     
+    int index = 0;
+
     //If the argument entered is empty or failed, then the loop is restarted and input is recieved again
     if (args[0] == NULL || *args[0] == '\n') {
         return 1;
     }
-    
-    if (strcmp(args[0], "command") == 0) {
-        return csh_launch(csh_read_file_input(args));
-    }
 
+    while (args[index] != NULL) {
+        
+        if (strcmp(args[index], ">") == 0) {
+            out = 1;
+        } else if (strcmp(args[index], "<") == 0) {
+            in = 1;
+        }
+        index++;
+    }
+    
     //Checkin whether the command is built in by looping through built_in_strs
     for (int i = 0; i < (sizeof(built_in_strs) / sizeof(built_in_strs[0])); i++) {
         if (strcmp(args[0], built_in_strs[i]) == 0) {
