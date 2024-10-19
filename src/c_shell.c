@@ -253,11 +253,9 @@ int csh_launch(char **args) {
     pid_t pid, wpid;
     int status;
     int status_code;
-    int position = 0;
+    int position;
     char **strs;
     char *str;
-    char *input;
-
 
     strs = malloc(2 * sizeof(char*));
 
@@ -289,12 +287,26 @@ int csh_launch(char **args) {
     } else if (pid == 0) {
 
         if (in) {
+            position = 0;
+            char *line;
+            char **new_args;
+            char *linecopy;
             int fd0 = open(strs[1], O_RDONLY);
             dup2(fd0, STDIN_FILENO);
+            line = csh_read_line();
+            linecopy = malloc(strlen(line) + 1);
+            new_args = csh_parse_line(line, linecopy);
+            free(linecopy);
+            while (new_args[position] != NULL) {
+                args[position] = new_args[position];
+                position++;
+            }
+            args[position] = NULL;
             close(fd0);
             in = 0;
         }
         if (out) {
+            position = 0;
             while (!(strcmp(args[position], ">") == 0)) {
                 position++;
             }
