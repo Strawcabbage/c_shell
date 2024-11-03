@@ -34,8 +34,8 @@ char curr_dir[PATH_MAX];
 int curr_hist_index = -1;
 char *history[MAX_HISTORY];
 int history_count = 0;
-int in = 0;
-int out = 0;
+char *infile = NULL;
+char *outfile = NULL;
 
 //Function pointer to built in commands (exit, echo)
 int (*built_in_func[]) (char**) = {
@@ -132,6 +132,8 @@ void csh_loop(void) {
     do {
        
        printf("%s> ", curr_dir);
+       
+       fflush(stdout);
 
        line = csh_read_line();
        linecopy = malloc(strlen(line) + 1);
@@ -172,6 +174,8 @@ char *csh_read_line(void) {
             exit(EXIT_FAILURE);
         }
     }
+
+    buffer[strcspn(buffer, "\n")] = 0;
     
     //disableRawMode();
 
@@ -217,30 +221,42 @@ char **csh_parse_line(char *line, char *linecopy) {
     //This while loop will parse all of line copy and add each token to strs
     while (str != NULL) {
         
-        //Adding the first token to strs using position as a guide
-        strs[position] = str;
-        
-        //Checking if the memory for string needs to be expanded by seeing if position is greater than the bufsize allocated
-        if (position >= bufsize) {
-            bufsize *= 2;
-
-            //Using realloc for new allocation
-            strs = realloc(strs, bufsize * sizeof(char*));
+        if (strcmp(str, "<") == 0) {
             
-            //Making sure dynamic memory allocation succeeded
-            if (strs == NULL) {
-               perror("Error allocating memory");
-               free(strs);
-               exit(EXIT_FAILURE);
-            }
-        }
+            infile = strtok(NULL, " ");
+
+        } else if (strcmp(str, ">") == 0) {
+            
+            outfile = strtok(NULL, " ");
+
+        } else {
+
+            //Adding the first token to strs using position as a guide
+            strs[position] = str;
         
+            //Checking if the memory for string needs to be expanded by seeing if position is greater than the bufsize allocated
+            if (position >= bufsize) {
+                bufsize *= 2;
+
+                //Using realloc for new allocation
+                strs = realloc(strs, bufsize * sizeof(char*));
+            
+                //Making sure dynamic memory allocation succeeded
+                if (strs == NULL) {
+                    perror("Error allocating memory");
+                   free(strs);
+                   exit(EXIT_FAILURE);
+                }
+            }
+            
+        }
+
         //Null terminating str before adding it to str again
         str = strtok(NULL, delims);
-        position++;
-
+        position++; 
+        
     }
-    
+        
     //Null ending strs then returning it
     strs[position] = NULL;
     return strs;
@@ -253,25 +269,40 @@ int csh_launch(char **args) {
     pid_t pid, wpid;
     int status;
     int status_code;
-    int position;
-    char **strs;
-    char *str;
+    
+    if (infile) {
+        int fd = open(infile, O_RDONLY);
+        if (fd < 0) {
+            
+            perror("failed opening file to read");
+            return 1;
 
-    strs = malloc(2 * sizeof(char*));
-
-    if (strs == NULL) {
-        perror("Error allocating memory");
-        free(strs);
-        return 1;
+        }
+        if (dup2(fd, STDIN_FILENO) < 0) {
+            perror("redirecting input failed");
+            close(fd);
+            return 1;
+        }
+        close(fd);
     }
 
-    str = strtok(line, "<>");
-    strs[0] = str;
-    str = strtok(NULL, "<>");
-    strs[1] = str;
-    
+    if (outfile) {
+        int fd = open(outfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (fd < 0) {
 
-    //Forking the parent proccess into a child and the parent
+            perror("Failed opening file to write");
+            return 1;
+
+        }
+        if (dup2(fd, STDOUT_FILENO) < 0) {
+            perror("redirecting output failed");
+            close(fd);
+            return 1;
+        }
+        close(fd);
+    }
+    
+    // Forking the parent proccess into a child and the parent
     pid = fork();
     
     /*
@@ -281,45 +312,9 @@ int csh_launch(char **args) {
     */
     if (pid<0) {
         perror("Fork fail");
-        exit(EXIT_FAILURE);
-        free(strs);
+        exit(EXIT_FAILURE);       
         return 1;
     } else if (pid == 0) {
-
-        if (in) {
-            position = 0;
-            char *line;
-            char **new_args;
-            char *linecopy;
-            int fd0 = open(strs[1], O_RDONLY);
-            dup2(fd0, STDIN_FILENO);
-            line = csh_read_line();
-            linecopy = malloc(strlen(line) + 1);
-            new_args = csh_parse_line(line, linecopy);
-            free(linecopy);
-            while (new_args[position] != NULL) {
-                args[position] = new_args[position];
-                position++;
-            }
-            args[position] = NULL;
-            close(fd0);
-            in = 0;
-        }
-        if (out) {
-            position = 0;
-            while (!(strcmp(args[position], ">") == 0)) {
-                position++;
-            }
-            while (args[position] != NULL) {
-                args[position] = NULL;
-                position++;
-            }
-            int fd1 = creat(strs[1], 0644);
-            dup2(fd1, STDOUT_FILENO);
-            close(fd1);
-            out = 0;
-        }
-        free(strs);
         status_code = execvp(args[0], args);
         if (status_code == -1) {
             perror("Process did not execute");
@@ -340,23 +335,11 @@ int csh_launch(char **args) {
 */
 int csh_execute(char **args) {
     
-    int index = 0;
-
     //If the argument entered is empty or failed, then the loop is restarted and input is recieved again
     if (args[0] == NULL || *args[0] == '\n') {
         return 1;
     }
-
-    while (args[index] != NULL) {
-        
-        if (strcmp(args[index], ">") == 0) {
-            out = 1;
-        } else if (strcmp(args[index], "<") == 0) {
-            in = 1;
-        }
-        index++;
-    }
-    
+ 
     //Checkin whether the command is built in by looping through built_in_strs
     for (int i = 0; i < (sizeof(built_in_strs) / sizeof(built_in_strs[0])); i++) {
         if (strcmp(args[0], built_in_strs[i]) == 0) {
