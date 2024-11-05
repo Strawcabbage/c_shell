@@ -6,4 +6,3 @@ nums.txt
 output.txt
 shell
 test
-/root/c_shell/src> 

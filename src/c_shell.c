@@ -132,8 +132,10 @@ void csh_loop(void) {
     do {
        
        printf("%s> ", curr_dir);
-       
+
        fflush(stdout);
+       infile = NULL;
+       outfile = NULL;
 
        line = csh_read_line();
        linecopy = malloc(strlen(line) + 1);
@@ -144,7 +146,7 @@ void csh_loop(void) {
        free(line);
        free(args);
        free(linecopy);
-
+        
     } while (status);
     
 }
@@ -269,38 +271,8 @@ int csh_launch(char **args) {
     pid_t pid, wpid;
     int status;
     int status_code;
-    
-    if (infile) {
-        int fd = open(infile, O_RDONLY);
-        if (fd < 0) {
-            
-            perror("failed opening file to read");
-            return 1;
-
-        }
-        if (dup2(fd, STDIN_FILENO) < 0) {
-            perror("redirecting input failed");
-            close(fd);
-            return 1;
-        }
-        close(fd);
-    }
-
-    if (outfile) {
-        int fd = open(outfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-        if (fd < 0) {
-
-            perror("Failed opening file to write");
-            return 1;
-
-        }
-        if (dup2(fd, STDOUT_FILENO) < 0) {
-            perror("redirecting output failed");
-            close(fd);
-            return 1;
-        }
-        close(fd);
-    }
+    int saved_stdin = dup(STDIN_FILENO);
+    int saved_stdout = dup(STDOUT_FILENO);
     
     // Forking the parent proccess into a child and the parent
     pid = fork();
@@ -315,6 +287,39 @@ int csh_launch(char **args) {
         exit(EXIT_FAILURE);       
         return 1;
     } else if (pid == 0) {
+        
+        if (infile) {
+            int fd_in = open(infile, O_RDONLY);
+            if (fd_in < 0) {
+            
+                perror("failed opening file to read");
+                return 1;
+
+            }
+            if (dup2(fd_in, STDIN_FILENO) < 0) {
+                perror("redirecting input failed");
+                close(fd_in);
+                return 1;
+            }
+            close(fd_in);
+        }
+
+        if (outfile) {
+            int fd_out = open(outfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (fd_out < 0) {
+
+                perror("Failed opening file to write");
+                return 1;
+
+            }
+            if (dup2(fd_out, STDOUT_FILENO) < 0) {
+                perror("redirecting output failed");
+                close(fd_out);
+                return 1;
+            }
+            close(fd_out);
+        }      
+        
         status_code = execvp(args[0], args);
         if (status_code == -1) {
             perror("Process did not execute");
@@ -325,6 +330,13 @@ int csh_launch(char **args) {
         do { 
             wpid = waitpid(pid, &status, WUNTRACED);
         } while (!WIFEXITED(status) && !WIFSIGNALED(status));
+        
+        fflush(stdout);
+        dup2(saved_stdin, STDIN_FILENO);
+        dup2(saved_stdout, STDOUT_FILENO);
+        close(saved_stdin);
+        close(saved_stdout);
+
     }
     return 1;
 }
