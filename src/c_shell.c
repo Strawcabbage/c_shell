@@ -47,7 +47,7 @@ int history_count = 0;
 char *infile = NULL;
 char *outfile = NULL;
 struct pipe_command *cmd;
-int pipe_commands = 0;
+int total_cmds = 0;
 
 //Function pointer to built in commands (exit, echo)
 int (*built_in_func[]) (char**) = {
@@ -143,22 +143,26 @@ void csh_loop(void) {
     //While loop to read read, parse, and execute input
     do {
        
-       printf("%s> ", curr_dir);
+        printf("%s> ", curr_dir);
 
-       fflush(stdout);
-       infile = NULL;
-       outfile = NULL;
+        fflush(stdout);
+        infile = NULL;
+        outfile = NULL;
 
-       line = csh_read_line();
-       linecopy = malloc(strlen(line) + 1);
-       args = csh_parse_line(line, linecopy);
-       status = csh_execute(args);
+        line = csh_read_line();
+        linecopy = malloc(strlen(line) + 1);
+        args = csh_parse_line(line, linecopy);
+        status = csh_execute(args);
        
-       //Freeing memory allocated to args and lines to prevent memory leaks before looping again or exiting
-       free(line);
-       free(args);
-       free(linecopy);
-       free(cmd);
+        //Freeing memory allocated to args and lines to prevent memory leaks before looping again or exiting
+        free(line);
+        free(args);
+        free(linecopy);
+
+        for (int i = 0; cmd[i].argv != NULL; i++) {
+            free(cmd[i].argv);
+        }
+        free(cmd);
         
     } while (status);
     
@@ -209,12 +213,12 @@ char **csh_parse_line(char *line, char *linecopy) {
     char **strs;
     char *delims = DELIMS;
     char *command[10];
-    int total_cmds = 0;
-    pipe_commands = 0;
+    total_cmds = 0;
+    int pipe = 0;
 
     //Making sure dynamic memory allocation succeeded
     if (linecopy == NULL) {
-        perror("Error allocating memory");
+        perror("Error allocating memory to linecopy");
         free(linecopy);
         exit(EXIT_FAILURE);
     }
@@ -227,16 +231,20 @@ char **csh_parse_line(char *line, char *linecopy) {
     
     //Making sure dynamic memory allocation succeeded
     if (strs == NULL) {
-        perror("Error allocating memory");
+        perror("Error allocating memory strs");
         free(strs);
         exit(EXIT_FAILURE);
     }
-
+    
     cmd = malloc(10 * sizeof(struct pipe_command));
+    
     if (cmd == NULL) {
-        perror("Error allocating memory");
+        perror("Error allocating memory to cmd");
         free(cmd);
-        exit(EXIT_FAILURE);
+    }
+
+    for (int i = 0; i < 10; ++i) {
+        cmd[i].argv = NULL;
     }
     
     //Initializing strtok with string linecopy and delimeters then assiging the first token to str
@@ -267,7 +275,7 @@ char **csh_parse_line(char *line, char *linecopy) {
             
                 //Making sure dynamic memory allocation succeeded
                 if (strs == NULL) {
-                   perror("Error allocating memory");
+                   perror("Error reallocating memory to strs");
                    free(strs);
                    exit(EXIT_FAILURE);
                 }
@@ -298,22 +306,36 @@ char **csh_parse_line(char *line, char *linecopy) {
             }
             for (int j = last_pipe + 1; j < i; j++) {
                 command[command_index++] = strs[j];
-                command[command_index] = NULL;
             }
             
-            cmd[total_cmds++].argv = command;
+             
+            command[command_index] = NULL;
+            
+            
+            cmd[total_cmds].argv = malloc(5 * sizeof(char *));
+            if (cmd[total_cmds].argv == NULL) {
+                perror("Error allocationg memory to argv");
+            }
             
             for (int j = 0; command[j] != NULL; j++) {
+                cmd[total_cmds].argv[j] = command[j];
+            }
+            
+            printf("%s\n", cmd[0].argv[0]);
+
+            for (int j = 0; command[j] != NULL; j++) { 
                 command[j] = NULL;
             }
-            pipe_commands++;
+            
+            total_cmds++;
+            pipe = 1;
         }
     }
 
-    if (cmd[0].argv != NULL) {
+    if (pipe) {
         int last_pipe = 0;
         int command_index = 0;
-
+        
         for (int i = position - 1; i > -1; i--) {
             if (strcmp(strs[i], "|") == 0) {
                 last_pipe = i;
@@ -326,13 +348,25 @@ char **csh_parse_line(char *line, char *linecopy) {
             command[command_index] = NULL;
         }
         
-        cmd[total_cmds++].argv = command;
+        cmd[total_cmds].argv = malloc(5 * sizeof(char *));
+        if (cmd[total_cmds].argv == NULL) {
+            perror("Error allocating memory to argv for last pipe");   
+        }
+
+        for (int i = 0; command[i] != NULL; i++) {
+            cmd[total_cmds].argv[i] = command[i];
+        }
+        
         for (int i = 0; command[i] != NULL; i++) {
             command[i] = NULL;
         }
-        pipe_commands++;
+        
     }
     
+    printf("%s\n", cmd[0].argv[0]);
+    /*printf("%s\n", cmd[total_cmds - 2].argv[1]);
+    printf("%s\n", cmd[total_cmds - 1].argv[0]);
+    printf("%s\n", cmd[total_cmds - 1].argv[1]);*/
     cmd[total_cmds].argv = NULL;
 
     return strs;
@@ -395,18 +429,11 @@ int csh_launch(char **args) {
             close(fd_out);
         }
 
-        if (cmd[0].argv != NULL) {
-            status_code = fork_pipes(pipe_commands, cmd);
-            if (status_code == -1) {
-                perror("Process did not execute");
-            }
-        } else {
-            status_code = execvp(args[0], args);
-            if (status_code == -1) {
-                perror("Process did not execute");
-            }
-            exit(EXIT_FAILURE);
+        status_code = execvp(args[0], args);
+        if (status_code == -1) {
+            perror("Process did not execute");
         }
+        exit(EXIT_FAILURE);
 
     } else {  
         do { 
@@ -423,7 +450,8 @@ int csh_launch(char **args) {
     return 1;
 }
 
-/* The function for deciding whether a command is for a built in
+/* 
+ * The function for deciding whether a command is for a built in
  * function or a system command by using built_in_strs
  * then returning a status after checking
 */
@@ -441,6 +469,11 @@ int csh_execute(char **args) {
             return (*built_in_func[i])(args);
         }
     }
+
+    if (cmd[0].argv != NULL) {
+        return fork_pipes(total_cmds, cmd);
+    }
+
     //The command is not built in and now we run the function to launch the new command
     return csh_launch(args);
 }
@@ -454,8 +487,13 @@ int fork_pipes(int n, struct pipe_command *cmd) {
     in = 0;
 
     // Note the loop bound, we spawn here all, but the last stage of the pipeline.
-    for (i = 0; i < n - 1; ++i) {
-    
+    for (i = 0; i < n - 1; i++) {
+        
+        for (int j = 0; cmd[i].argv[j] != NULL; j++) {
+            printf("%s\n", cmd[i].argv[j]);
+        }
+        printf("\n");
+        
         if (pipe(fd) == -1) {
             perror("pipe");
         }
@@ -475,7 +513,13 @@ int fork_pipes(int n, struct pipe_command *cmd) {
     dup2(in, 0);
 
     // execute the last stage with the current process.
-    return execvp (cmd[i].argv [0], (char *const *)cmd[i].argv);
+    if (execvp(cmd[i].argv [0], (char *const *)cmd[i].argv) == -1) {
+        perror("failed to execute command");
+    }
+    
+    fflush(stdout);
+
+    return 1;
 }
 
 int spawn_proc(int in, int out, struct pipe_command *cmd) {
