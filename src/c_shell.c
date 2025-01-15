@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 #define DELIMS " /\r\a\t\n" 
 #define MAX_HISTORY 100
+#define MAX_PIPES 10
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,6 +27,15 @@ int csh_exit();
 int csh_cd();
 int csh_help();
 
+
+struct pipe_command
+{
+    char **argv;
+};
+
+int spawn_proc(int, int, struct pipe_command *);
+int fork_pipes(int, struct pipe_command *);
+
 //Global variables
 const char *built_in_strs[] = {"exit", "cd", "help"};
 char *line;
@@ -36,6 +46,8 @@ char *history[MAX_HISTORY];
 int history_count = 0;
 char *infile = NULL;
 char *outfile = NULL;
+struct pipe_command *cmd;
+int total_cmds = 0;
 
 //Function pointer to built in commands (exit, echo)
 int (*built_in_func[]) (char**) = {
@@ -131,21 +143,26 @@ void csh_loop(void) {
     //While loop to read read, parse, and execute input
     do {
        
-       printf("%s> ", curr_dir);
+        printf("%s> ", curr_dir);
 
-       fflush(stdout);
-       infile = NULL;
-       outfile = NULL;
+        fflush(stdout);
+        infile = NULL;
+        outfile = NULL;
 
-       line = csh_read_line();
-       linecopy = malloc(strlen(line) + 1);
-       args = csh_parse_line(line, linecopy);
-       status = csh_execute(args);
+        line = csh_read_line();
+        linecopy = malloc(strlen(line) + 1);
+        args = csh_parse_line(line, linecopy);
+        status = csh_execute(args);
        
-       //Freeing memory allocated to args and lines to prevent memory leaks before looping again or exiting
-       free(line);
-       free(args);
-       free(linecopy);
+        //Freeing memory allocated to args and lines to prevent memory leaks before looping again or exiting
+        free(line);
+        free(args);
+        free(linecopy);
+
+        for (int i = 0; cmd[i].argv != NULL; i++) {
+            free(cmd[i].argv);
+        }
+        free(cmd);
         
     } while (status);
     
@@ -195,11 +212,13 @@ char **csh_parse_line(char *line, char *linecopy) {
     size_t bufsize = 64;
     char **strs;
     char *delims = DELIMS;
-   
-   
+    char *command[10];
+    total_cmds = 0;
+    int pipe = 0;
+
     //Making sure dynamic memory allocation succeeded
     if (linecopy == NULL) {
-        perror("Error allocating memory");
+        perror("Error allocating memory to linecopy");
         free(linecopy);
         exit(EXIT_FAILURE);
     }
@@ -212,9 +231,20 @@ char **csh_parse_line(char *line, char *linecopy) {
     
     //Making sure dynamic memory allocation succeeded
     if (strs == NULL) {
-        perror("Error allocating memory");
+        perror("Error allocating memory strs");
         free(strs);
         exit(EXIT_FAILURE);
+    }
+    
+    cmd = malloc(10 * sizeof(struct pipe_command));
+    
+    if (cmd == NULL) {
+        perror("Error allocating memory to cmd");
+        free(cmd);
+    }
+
+    for (int i = 0; i < 10; ++i) {
+        cmd[i].argv = NULL;
     }
     
     //Initializing strtok with string linecopy and delimeters then assiging the first token to str
@@ -245,7 +275,7 @@ char **csh_parse_line(char *line, char *linecopy) {
             
                 //Making sure dynamic memory allocation succeeded
                 if (strs == NULL) {
-                    perror("Error allocating memory");
+                   perror("Error reallocating memory to strs");
                    free(strs);
                    exit(EXIT_FAILURE);
                 }
@@ -258,9 +288,87 @@ char **csh_parse_line(char *line, char *linecopy) {
         position++; 
         
     }
+
         
     //Null ending strs then returning it
     strs[position] = NULL;
+
+    for (int i = 0; strs[i] != NULL; i++) {
+        if (strcmp(strs[i], "|") == 0) {
+
+            int last_pipe = -1;
+            int command_index = 0;
+            for (int j = i - 1; j > -1; j--) {
+                if (strcmp(strs[j], "|") == 0) {
+                    last_pipe = j;
+                    break;
+                }
+            }
+            for (int j = last_pipe + 1; j < i; j++) {
+                command[command_index++] = strs[j];
+            }
+            
+             
+            command[command_index] = NULL;
+            
+            
+            cmd[total_cmds].argv = malloc(5 * sizeof(char *));
+            if (cmd[total_cmds].argv == NULL) {
+                perror("Error allocationg memory to argv");
+            }
+            
+            for (int j = 0; command[j] != NULL; j++) {
+                cmd[total_cmds].argv[j] = command[j];
+            }
+            
+            printf("%s\n", cmd[0].argv[0]);
+
+            for (int j = 0; command[j] != NULL; j++) { 
+                command[j] = NULL;
+            }
+            
+            total_cmds++;
+            pipe = 1;
+        }
+    }
+
+    if (pipe) {
+        int last_pipe = 0;
+        int command_index = 0;
+        
+        for (int i = position - 1; i > -1; i--) {
+            if (strcmp(strs[i], "|") == 0) {
+                last_pipe = i;
+                break;
+            }
+        }
+        
+        for (int i = last_pipe + 1; strs[i] != NULL; i++) {
+            command[command_index++] = strs[i];
+            command[command_index] = NULL;
+        }
+        
+        cmd[total_cmds].argv = malloc(5 * sizeof(char *));
+        if (cmd[total_cmds].argv == NULL) {
+            perror("Error allocating memory to argv for last pipe");   
+        }
+
+        for (int i = 0; command[i] != NULL; i++) {
+            cmd[total_cmds].argv[i] = command[i];
+        }
+        
+        for (int i = 0; command[i] != NULL; i++) {
+            command[i] = NULL;
+        }
+        
+    }
+    
+    printf("%s\n", cmd[0].argv[0]);
+    /*printf("%s\n", cmd[total_cmds - 2].argv[1]);
+    printf("%s\n", cmd[total_cmds - 1].argv[0]);
+    printf("%s\n", cmd[total_cmds - 1].argv[1]);*/
+    cmd[total_cmds].argv = NULL;
+
     return strs;
 }
 
@@ -268,26 +376,27 @@ char **csh_parse_line(char *line, char *linecopy) {
 int csh_launch(char **args) {
     
     //Declaring variables
-    pid_t pid, wpid;
+    pid_t cpid, wpid;
     int status;
     int status_code;
     int saved_stdin = dup(STDIN_FILENO);
     int saved_stdout = dup(STDOUT_FILENO);
+
     
     // Forking the parent proccess into a child and the parent
-    pid = fork();
+    cpid = fork();
     
     /*
      * Checking if fork failed then executing new program on child
      * process using execvp(). Also telling the parent process to
      * wait for child process to signal that it is finished.
     */
-    if (pid<0) {
+    if (cpid<0) {
         perror("Fork fail");
         exit(EXIT_FAILURE);       
         return 1;
-    } else if (pid == 0) {
-        
+    } else if (cpid == 0) {
+
         if (infile) {
             int fd_in = open(infile, O_RDONLY);
             if (fd_in < 0) {
@@ -318,8 +427,8 @@ int csh_launch(char **args) {
                 return 1;
             }
             close(fd_out);
-        }      
-        
+        }
+
         status_code = execvp(args[0], args);
         if (status_code == -1) {
             perror("Process did not execute");
@@ -328,7 +437,7 @@ int csh_launch(char **args) {
 
     } else {  
         do { 
-            wpid = waitpid(pid, &status, WUNTRACED);
+            wpid = waitpid(cpid, &status, WUNTRACED);
         } while (!WIFEXITED(status) && !WIFSIGNALED(status));
         
         fflush(stdout);
@@ -341,7 +450,8 @@ int csh_launch(char **args) {
     return 1;
 }
 
-/* The function for deciding whether a command is for a built in
+/* 
+ * The function for deciding whether a command is for a built in
  * function or a system command by using built_in_strs
  * then returning a status after checking
 */
@@ -359,8 +469,77 @@ int csh_execute(char **args) {
             return (*built_in_func[i])(args);
         }
     }
+
+    if (cmd[0].argv != NULL) {
+        return fork_pipes(total_cmds, cmd);
+    }
+
     //The command is not built in and now we run the function to launch the new command
     return csh_launch(args);
+}
+
+int fork_pipes(int n, struct pipe_command *cmd) {
+    int i;
+    pid_t pid;
+    int in, fd [2];
+    
+    // The first process should get its input from the original file descriptor 0.
+    in = 0;
+
+    // Note the loop bound, we spawn here all, but the last stage of the pipeline.
+    for (i = 0; i < n - 1; i++) {
+        
+        for (int j = 0; cmd[i].argv[j] != NULL; j++) {
+            printf("%s\n", cmd[i].argv[j]);
+        }
+        printf("\n");
+        
+        if (pipe(fd) == -1) {
+            perror("pipe");
+        }
+        // f [1] is the write end of the pipe, we carry `in` from the prev iteration.
+        spawn_proc(in, fd [1], cmd + i);
+
+        // No need for the write end of the pipe, the child will write here.
+        close(fd [1]);
+
+        // Keep the read end of the pipe, the next child will read from there.
+        in = fd[0];
+        }
+
+    /* Last stage of the pipeline - set stdin be the read end of the previous pipe
+     and output to the original file descriptor 1. */
+    if (in != 0)
+    dup2(in, 0);
+
+    // execute the last stage with the current process.
+    if (execvp(cmd[i].argv [0], (char *const *)cmd[i].argv) == -1) {
+        perror("failed to execute command");
+    }
+    
+    fflush(stdout);
+
+    return 1;
+}
+
+int spawn_proc(int in, int out, struct pipe_command *cmd) {
+    pid_t pid;
+
+    if ((pid = fork()) == 0) {
+        if (in != 0) {
+            dup2(in, 0);
+            close(in);
+        }
+
+        if (out != 1) {
+            dup2(out, 1);
+            close(out);
+        }
+
+        return execvp (cmd->argv[0], (char *const *)cmd->argv);
+    }
+
+    return pid;
 }
 
 void addToHistory(const char *cmd) {
