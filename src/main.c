@@ -11,8 +11,6 @@ char *history[MAX_HISTORY];
 int history_count = 0;
 char *infile = NULL;
 char *outfile = NULL;
-struct pipe_command *cmd;
-int total_cmds = 0;
 
 int main(int argc, char **argv) {
 

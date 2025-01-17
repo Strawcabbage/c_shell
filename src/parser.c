@@ -1,3 +1,4 @@
+// parser.c
 #include "shell.h"
 
 //Parsing the read input into a char pointer to an array of Strings
@@ -9,9 +10,7 @@ char **csh_parse_line(char *line, char *linecopy) {
     size_t bufsize = 64;
     char **strs;
     char *delims = DELIMS;
-    //char *command[10];
-    total_cmds = 0;
-    //int pipe = 0;
+
 
     //Making sure dynamic memory allocation succeeded
     if (linecopy == NULL) {
@@ -31,17 +30,6 @@ char **csh_parse_line(char *line, char *linecopy) {
         perror("Error allocating memory strs");
         free(strs);
         exit(EXIT_FAILURE);
-    }
-    
-    cmd = malloc(10 * sizeof(struct pipe_command));
-    
-    if (cmd == NULL) {
-        perror("Error allocating memory to cmd");
-        free(cmd);
-    }
-
-    for (int i = 0; i < 10; ++i) {
-        cmd[i].argv = NULL;
     }
     
     //Initializing strtok with string linecopy and delimeters then assiging the first token to str
@@ -85,86 +73,110 @@ char **csh_parse_line(char *line, char *linecopy) {
         position++; 
         
     }
-        
+
     //Null ending strs then returning it
     strs[position] = NULL;
-    /*
-    for (int i = 0; strs[i] != NULL; i++) {
-        if (strcmp(strs[i], "|") == 0) {
-
-            int last_pipe = -1;
-            int command_index = 0;
-            for (int j = i - 1; j > -1; j--) {
-                if (strcmp(strs[j], "|") == 0) {
-                    last_pipe = j;
-                    break;
-                }
-            }
-            for (int j = last_pipe + 1; j < i; j++) {
-                command[command_index++] = strs[j];
-            }
-            
-             
-            command[command_index] = NULL;
-            
-            
-            cmd[total_cmds].argv = malloc(5 * sizeof(char *));
-            if (cmd[total_cmds].argv == NULL) {
-                perror("Error allocationg memory to argv");
-            }
-            
-            for (int j = 0; command[j] != NULL; j++) {
-                cmd[total_cmds].argv[j] = command[j];
-            }
-            
-            printf("%s\n", cmd[0].argv[0]);
-
-            for (int j = 0; command[j] != NULL; j++) { 
-                command[j] = NULL;
-            }
-            
-            total_cmds++;
-            pipe = 1;
-        }
-    }
-
-    if (pipe) {
-        int last_pipe = 0;
-        int command_index = 0;
-        
-        for (int i = position - 1; i > -1; i--) {
-            if (strcmp(strs[i], "|") == 0) {
-                last_pipe = i;
-                break;
-            }
-        }
-        
-        for (int i = last_pipe + 1; strs[i] != NULL; i++) {
-            command[command_index++] = strs[i];
-            command[command_index] = NULL;
-        }
-        
-        cmd[total_cmds].argv = malloc(5 * sizeof(char *));
-        if (cmd[total_cmds].argv == NULL) {
-            perror("Error allocating memory to argv for last pipe");   
-        }
-
-        for (int i = 0; command[i] != NULL; i++) {
-            cmd[total_cmds].argv[i] = command[i];
-        }
-        
-        for (int i = 0; command[i] != NULL; i++) {
-            command[i] = NULL;
-        }
-        
-    }
-    
-    printf("%s\n", cmd[0].argv[0]);*/
-    /*printf("%s\n", cmd[total_cmds - 2].argv[1]);
-    printf("%s\n", cmd[total_cmds - 1].argv[0]);
-    printf("%s\n", cmd[total_cmds - 1].argv[1]);*/
-    cmd[total_cmds].argv = NULL;
-
     return strs;
 }
 
+struct pipe_command* initialize_commands(char **strs) {
+    // Define the number of commands
+    int num_commands = 0;
+    int index = 0;
+    int first_pipe = 0;
+    int pipe_index = 0;
+    int arg_index = 0;
+
+    int *pipe_indexes = malloc((MAX_PIPES + 1) * sizeof(int));
+    if (pipe_indexes == NULL) {
+        perror("Failed to allocate memory for pipe_indexes");
+        free(pipe_indexes);
+    }
+    
+    // Finding how many times pipes are used
+    pipe_indexes[pipe_index++] = 0;
+    while (strs[index] != NULL) {
+        
+        if (strcmp(strs[index], "|") == 0) {
+
+            pipe_indexes[pipe_index++] = index;
+
+            if (first_pipe == 0) {
+                num_commands += 2;
+                first_pipe++;
+            } else {
+                num_commands++;
+            }   
+        }
+        index++;
+    }
+
+    pipe_index = 0;
+    first_pipe = 0;
+
+    // Allocate memory for the array of pipe_command structs
+    struct pipe_command *commands = malloc(num_commands * sizeof(struct pipe_command));
+    if (commands == NULL) {
+        perror("Failed to allocate memory for commands");
+        free(commands);
+    }
+        
+    for (int i = 0; i < num_commands - 1; i++) {
+        
+        arg_index = 0;
+        
+        commands[i].argv = malloc(MAX_PIPE_ARGUMENTS * sizeof(char *)); // Example: 3 arguments per command
+
+        if (commands[i].argv == NULL) {
+            perror("Failed to allocate memory for argv");
+            for (int j = i - 1; j >= 0; j--) {
+                for (int k = 0; commands[j].argv[k] != NULL; k++) {
+                    free(commands[j].argv[k]); // Free each string in argv
+                }
+                free(commands[j].argv); // Free argv array
+            }
+        }
+
+        for (int j = pipe_indexes[pipe_index++]; j < pipe_indexes[pipe_index]; j++) {
+            
+            if (first_pipe != 0) {
+                j++;
+            }
+
+            commands[i].argv[arg_index] = strdup(strs[j]);
+
+            if (commands[i].argv[arg_index] == NULL) {
+                perror("Failed to allocate memory for string");
+                // Free already allocated strings in argv
+                for (int k = 0; k < arg_index; k++) {
+                    free(commands[i].argv[k]);
+                }
+                free(commands[i].argv);
+            }
+
+            arg_index++;
+            first_pipe = 1;
+
+        }
+    }
+    
+    arg_index = 0;
+
+    for (int i = pipe_indexes[pipe_index]; strs[i] != NULL; i++) {
+
+        commands[num_commands - 1].argv[arg_index] = strdup(strs[i]);
+
+        if (commands[num_commands - 1].argv[arg_index] == NULL) {
+            perror("Failed to allocate memory for string");
+            // Free already allocated strings in argv
+            for (int j = 0; j < arg_index; j++) {
+                free(commands[num_commands - 1].argv[j]);
+            }
+            free(commands[num_commands - 1].argv);
+        }
+
+    }
+
+
+    return commands;
+}

@@ -5,6 +5,7 @@
 #define DELIMS " /\r\a\t\n"
 #define MAX_HISTORY 100
 #define MAX_PIPES 10
+#define MAX_PIPE_ARGUMENTS 10
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,9 +34,8 @@ extern char *history[MAX_HISTORY];
 extern int history_count;
 extern char *infile;
 extern char *outfile;
-extern struct pipe_command *cmd;
-extern int total_cmds;
 
+struct pipe_command* initialize_commands(char **strs);
 int csh_execute(char **);
 int csh_launch(char **);
 int csh_exit();
