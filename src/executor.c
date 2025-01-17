@@ -85,7 +85,7 @@ int csh_launch(char **args) {
 */
 int csh_execute(char **args) {
     
-    //If the argument entered is empty or failed, then the loop is restarted and input is recieved again
+    //If the argument entered is empty or failed, then the loop is restarted and input is received again
     if (args[0] == NULL || *args[0] == '\n') {
         return 1;
     }
@@ -97,10 +97,28 @@ int csh_execute(char **args) {
             return (*built_in_func[i])(args);
         }
     }
+    
+    int index = 0;
+    int num_commands = 0;
+    int first_pipe = 0;
 
-    if (cmd[0].argv != NULL) {
-        return fork_pipes(total_cmds, cmd);
-    }
+    while (args[index] != NULL) {
+        
+        if (strcmp(args[index], "|") == 0) {
+
+            if (first_pipe == 0) {
+                num_commands += 2;
+                first_pipe++;
+            } else {
+                num_commands++;
+            }   
+        }
+        index++;
+    } 
+
+    if (num_commands > 1) {
+        return fork_pipes(num_commands, initialize_commands(args));
+    }   
 
     //The command is not built in and now we run the function to launch the new command
     return csh_launch(args);
@@ -115,12 +133,7 @@ int fork_pipes(int n, struct pipe_command *cmd) {
     in = 0;
 
     // Note the loop bound, we spawn here all, but the last stage of the pipeline.
-    for (i = 0; i < n - 1; i++) {
-        
-        for (int j = 0; cmd[i].argv[j] != NULL; j++) {
-            printf("%s\n", cmd[i].argv[j]);
-        }
-        printf("\n");
+    for (i = 0; i < n - 1; i++) { 
         
         if (pipe(fd) == -1) {
             perror("pipe");
@@ -144,6 +157,8 @@ int fork_pipes(int n, struct pipe_command *cmd) {
     if (execvp(cmd[i].argv [0], (char *const *)cmd[i].argv) == -1) {
         perror("failed to execute command");
     }
+
+    free_pipe_commands(n, cmd);
     
     fflush(stdout);
 

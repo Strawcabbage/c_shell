@@ -28,11 +28,6 @@ void csh_loop(void) {
         free(line);
         free(args);
         free(linecopy);
-
-        for (int i = 0; cmd[i].argv != NULL; i++) {
-            free(cmd[i].argv);
-        }
-        free(cmd);
         
     } while (status);
     

@@ -66,6 +66,7 @@ char **csh_parse_line(char *line, char *linecopy) {
                 }
             }
             
+            
         }
 
         //Null terminating str before adding it to str again
@@ -94,7 +95,7 @@ struct pipe_command* initialize_commands(char **strs) {
     }
     
     // Finding how many times pipes are used
-    pipe_indexes[pipe_index++] = 0;
+    pipe_indexes[pipe_index++] = -1;
     while (strs[index] != NULL) {
         
         if (strcmp(strs[index], "|") == 0) {
@@ -110,9 +111,8 @@ struct pipe_command* initialize_commands(char **strs) {
         }
         index++;
     }
-
+    
     pipe_index = 0;
-    first_pipe = 0;
 
     // Allocate memory for the array of pipe_command structs
     struct pipe_command *commands = malloc(num_commands * sizeof(struct pipe_command));
@@ -121,11 +121,11 @@ struct pipe_command* initialize_commands(char **strs) {
         free(commands);
     }
         
-    for (int i = 0; i < num_commands - 1; i++) {
+    for (int i = 0; i < num_commands; i++) {
         
         arg_index = 0;
         
-        commands[i].argv = malloc(MAX_PIPE_ARGUMENTS * sizeof(char *)); // Example: 3 arguments per command
+        commands[i].argv = malloc(MAX_PIPE_ARGUMENTS * sizeof(char *));
 
         if (commands[i].argv == NULL) {
             perror("Failed to allocate memory for argv");
@@ -136,47 +136,52 @@ struct pipe_command* initialize_commands(char **strs) {
                 free(commands[j].argv); // Free argv array
             }
         }
+        
 
-        for (int j = pipe_indexes[pipe_index++]; j < pipe_indexes[pipe_index]; j++) {
-            
-            if (first_pipe != 0) {
-                j++;
-            }
+        if (i < num_commands - 1) {
 
-            commands[i].argv[arg_index] = strdup(strs[j]);
+            for (int j = pipe_indexes[pipe_index++] + 1; j < pipe_indexes[pipe_index]; j++) {
+                
+                commands[i].argv[arg_index] = strdup(strs[j]);
 
-            if (commands[i].argv[arg_index] == NULL) {
-                perror("Failed to allocate memory for string");
-                // Free already allocated strings in argv
-                for (int k = 0; k < arg_index; k++) {
-                    free(commands[i].argv[k]);
+                if (commands[i].argv[arg_index] == NULL) {
+                    perror("Failed to allocate memory for string");
+                    // Free already allocated strings in argv
+                    for (int k = 0; k < arg_index; k++) {
+                        free(commands[i].argv[k]);
+                    }
+                    free(commands[i].argv);
                 }
-                free(commands[i].argv);
+
+                arg_index++;
+
             }
-
-            arg_index++;
-            first_pipe = 1;
-
-        }
-    }
+        } else {
+            
+            arg_index = 0;
     
-    arg_index = 0;
+            for (int i = pipe_indexes[pipe_index] + 1; strs[i] != NULL; i++) {
 
-    for (int i = pipe_indexes[pipe_index]; strs[i] != NULL; i++) {
+                commands[num_commands - 1].argv[arg_index] = strdup(strs[i]);
 
-        commands[num_commands - 1].argv[arg_index] = strdup(strs[i]);
+                if (commands[num_commands - 1].argv[arg_index] == NULL) {
+                    perror("Failed to allocate memory for string");
+                    // Free already allocated strings in argv
+                    for (int j = 0; j < arg_index; j++) {
+                        free(commands[num_commands - 1].argv[j]);
+                    }
+                    free(commands[num_commands - 1].argv);
+                }
+                
+                arg_index++;
 
-        if (commands[num_commands - 1].argv[arg_index] == NULL) {
-            perror("Failed to allocate memory for string");
-            // Free already allocated strings in argv
-            for (int j = 0; j < arg_index; j++) {
-                free(commands[num_commands - 1].argv[j]);
             }
-            free(commands[num_commands - 1].argv);
+
         }
+ 
+    } 
 
-    }
-
+    free(pipe_indexes);
 
     return commands;
 }

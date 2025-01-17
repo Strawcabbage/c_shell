@@ -35,20 +35,33 @@ extern int history_count;
 extern char *infile;
 extern char *outfile;
 
-struct pipe_command* initialize_commands(char **strs);
-int csh_execute(char **);
-int csh_launch(char **);
+/*
+ *  |function declerations|
+ */
+
+// builtins.c
 int csh_exit();
 int csh_cd();
 int csh_help();
+
+// loop.c
 char *csh_read_line(void);
-char **csh_parse_line(char *, char *);
 void csh_loop(void);
+
+// parser.c
+char **csh_parse_line(char *, char *);
+struct pipe_command* initialize_commands(char **strs);
+
+// executor.c
+int csh_execute(char **);
+int csh_launch(char **);
 int fork_pipes(int, struct pipe_command *);
 int spawn_proc(int, int, struct pipe_command *);
+
+// utils.c
 void addToHistory(const char *);
-void enableRawMode(void);
-void disableRawMode(void);
+void free_pipe_commands(int, struct pipe_command *);
+void print_commands(struct pipe_command *, int); 
 
 #endif
 
