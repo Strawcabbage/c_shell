@@ -20,16 +20,27 @@ void csh_loop(void) {
         outfile = NULL;
 
         line = csh_read_line();
-        linecopy = malloc(strlen(line) + 1);
-        args = csh_parse_line(line, linecopy);
+
+        
+        add_to_history(line);
+
+
+        linecopy = strdup(line);
+
+        args = csh_parse_line(linecopy);
         status = csh_execute(args);
        
         //Freeing memory allocated to args and lines to prevent memory leaks before looping again or exiting
         free(line);
         free(args);
         free(linecopy);
+ 
         
     } while (status);
+
+    for (int i = 0; i < MAX_HISTORY; i++) {
+        free(history[i]);
+    }
     
 }
 
@@ -39,9 +50,6 @@ char *csh_read_line(void) {
     //Declaring variables
     size_t bufsize = 0;
     char *buffer = NULL;    
-
-
-    //enableRawMode();
 
     /*
      * Using getline() to dynamically allocate memory
@@ -60,8 +68,6 @@ char *csh_read_line(void) {
     }
 
     buffer[strcspn(buffer, "\n")] = 0;
-    
-    //disableRawMode();
 
     //Return buffer after getline() was used
     return buffer;

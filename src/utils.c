@@ -1,18 +1,31 @@
 #include "shell.h"
 
-void addToHistory(const char *cmd) {
+void add_to_history(char *cmd) {
     if (history_count < MAX_HISTORY) {
-        history[history_count] = strdup(cmd);
-        history_count++;
+        history[history_count++] = strdup(cmd);
     } else {
-        perror("Max history count exceeded, please restart shell");
+        free(history[0]);
+        for (int i = 0; i < MAX_HISTORY - 1; i++) {
+            history[i] = strdup(history[i + 1]);
+        }
+        history[MAX_HISTORY - 1] = strdup(cmd);
     }
     curr_hist_index = history_count;
 }
 
+void print_history() {
+    
+   int temp_index = curr_hist_index - 1;
+
+   for (int i = 0; i < temp_index; i++) {
+        printf(" - %s\n", history[i]);
+   }
+
+}
+
 void free_pipe_commands(int num_commands, struct pipe_command *cmd) {
     if (cmd == NULL) {
-        return; // Nothing to free
+        return;
     }
 
     // Loop through each command

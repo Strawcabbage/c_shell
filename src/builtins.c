@@ -3,7 +3,8 @@
 int (*built_in_func[]) (char**) = {
     &csh_exit,
     &csh_cd,
-    &csh_help
+    &csh_help,
+    &csh_history
 };
 
 //Built in function exit. This function exits the shell
@@ -78,3 +79,10 @@ int csh_help() {
     return 1;
 }
 
+int csh_history() {
+    
+    print_history();
+
+    return 1;
+
+}

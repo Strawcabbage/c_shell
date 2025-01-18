@@ -2,7 +2,7 @@
 #include "shell.h"
 
 //Parsing the read input into a char pointer to an array of Strings
-char **csh_parse_line(char *line, char *linecopy) {
+char **csh_parse_line(char *linecopy) {
     
     //Declaring Variables
     char *str;
@@ -11,16 +11,6 @@ char **csh_parse_line(char *line, char *linecopy) {
     char **strs;
     char *delims = DELIMS;
 
-
-    //Making sure dynamic memory allocation succeeded
-    if (linecopy == NULL) {
-        perror("Error allocating memory to linecopy");
-        free(linecopy);
-        exit(EXIT_FAILURE);
-    }
-    
-    //Deep copying the char pointer line so it can be used later in the echo built in function
-    strcpy(linecopy, line);
     
     //dyamically allocating memory to strs to allow for 64 char pointers
     strs = malloc(bufsize * sizeof(char*));

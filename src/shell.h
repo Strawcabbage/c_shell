@@ -3,7 +3,7 @@
 #define SHELL_H
 
 #define DELIMS " /\r\a\t\n"
-#define MAX_HISTORY 100
+#define MAX_HISTORY 10
 #define MAX_PIPES 10
 #define MAX_PIPE_ARGUMENTS 10
 
@@ -25,7 +25,7 @@ struct pipe_command {
 extern char **directory_array;
 extern int directory_count;
 extern int (*built_in_func[])(char **);
-extern const char *built_in_strs[3];
+extern const char *built_in_strs[4];
 extern char *line;
 extern char prev_dir[PATH_MAX];
 extern char home_dir[PATH_MAX];
@@ -43,13 +43,14 @@ extern char *outfile;
 int csh_exit();
 int csh_cd();
 int csh_help();
+int csh_history();
 
 // loop.c
 char *csh_read_line(void);
 void csh_loop(void);
 
 // parser.c
-char **csh_parse_line(char *, char *);
+char **csh_parse_line(char *);
 struct pipe_command* initialize_commands(char **strs);
 
 // executor.c
@@ -59,7 +60,8 @@ int fork_pipes(int, struct pipe_command *);
 int spawn_proc(int, int, struct pipe_command *);
 
 // utils.c
-void addToHistory(const char *);
+void add_to_history(char *);
+void print_history(void);
 void free_pipe_commands(int, struct pipe_command *);
 void print_commands(struct pipe_command *, int); 
 

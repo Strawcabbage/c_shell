@@ -44,7 +44,6 @@ int csh_launch(char **args) {
         if (outfile) {
             int fd_out = open(outfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
             if (fd_out < 0) {
-
                 perror("Failed opening file to write");
                 return 1;
 

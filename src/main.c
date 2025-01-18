@@ -2,7 +2,7 @@
 
 char **directory_array;
 int directory_count = 0;
-const char *built_in_strs[] = {"exit", "cd", "help"};
+const char *built_in_strs[] = {"exit", "cd", "help", "history"};
 char *line;
 char prev_dir[PATH_MAX];
 char home_dir[PATH_MAX];
@@ -11,6 +11,8 @@ char *history[MAX_HISTORY];
 int history_count = 0;
 char *infile = NULL;
 char *outfile = NULL;
+struct pipe_command *cmd;
+int total_cmds = 0;
 
 int main(int argc, char **argv) {
 
