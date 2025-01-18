@@ -117,52 +117,91 @@ int csh_execute(char **args) {
     } 
 
     if (num_commands > 1) {
-        return fork_pipes(num_commands, initialize_commands(args));
-    }   
+        // Piped commands
+        if (fork_pipes(num_commands, initialize_commands(args)) == -1) {
+            perror("Failed to execute piped commands");
+            return 1; // Continue the shell loop on failure
+        }
+        return 1; // Continue the shell loop on success
+    }
 
-    //The command is not built in and now we run the function to launch the new command
-    return csh_launch(args);
+    // Non-piped command
+    if (csh_launch(args) == -1) {
+        perror("Failed to launch command");
+    }
+
+    return 1;
 }
 
 int fork_pipes(int n, struct pipe_command *cmd) {
     int i;
+    int in = 0;          // Input file descriptor (initially stdin)
+    int fd[2];           // Pipe file descriptors
     pid_t pid;
-    int in, fd [2];
-    
-    // The first process should get its input from the original file descriptor 0.
-    in = 0;
 
-    // Note the loop bound, we spawn here all, but the last stage of the pipeline.
-    for (i = 0; i < n - 1; i++) { 
-        
+    for (i = 0; i < n - 1; i++) {
+        // Create a pipe
         if (pipe(fd) == -1) {
-            perror("pipe");
-        }
-        // f [1] is the write end of the pipe, we carry `in` from the prev iteration.
-        spawn_proc(in, fd [1], cmd + i);
-
-        // No need for the write end of the pipe, the child will write here.
-        close(fd [1]);
-
-        // Keep the read end of the pipe, the next child will read from there.
-        in = fd[0];
+            perror("pipe failed");
+            free_pipe_commands(n, cmd);
+            return -1;
         }
 
-    /* Last stage of the pipeline - set stdin be the read end of the previous pipe
-     and output to the original file descriptor 1. */
-    if (in != 0)
-    dup2(in, 0);
+        // Fork a child process
+        if ((pid = fork()) == -1) {
+            perror("fork failed");
+            free_pipe_commands(n, cmd);
+            return -1;
+        }
 
-    // execute the last stage with the current process.
-    if (execvp(cmd[i].argv [0], (char *const *)cmd[i].argv) == -1) {
-        perror("failed to execute command");
+        if (pid == 0) {
+            // Child process
+            if (in != 0) {
+                dup2(in, STDIN_FILENO); // Set stdin to the input of the previous pipe
+                close(in);
+            }
+            dup2(fd[1], STDOUT_FILENO); // Set stdout to the write end of the current pipe
+            close(fd[0]);               // Close unused read end of the pipe
+            close(fd[1]);               // Close write end after dup2
+
+            execvp(cmd[i].argv[0], cmd[i].argv); // Execute the command
+            perror("execvp failed");            // If execvp fails
+            exit(EXIT_FAILURE);
+        } else {
+            // Parent process
+            close(fd[1]); // Close write end of the current pipe
+            if (in != 0) close(in); // Close previous input
+            in = fd[0]; // Save read end of the current pipe for the next iteration
+        }
+    }
+
+    // Handle the last command in the pipeline
+    if ((pid = fork()) == -1) {
+        perror("fork failed");
+        free_pipe_commands(n, cmd);
+        return -1;
+    }
+
+    if (pid == 0) {
+        if (in != 0) {
+            dup2(in, STDIN_FILENO); // Set stdin to the input of the last pipe
+            close(in);
+        }
+
+        execvp(cmd[i].argv[0], cmd[i].argv); // Execute the last command
+        perror("execvp failed");            // If execvp fails
+        exit(EXIT_FAILURE);
+    }
+
+    close(in); // Close the final read end in the parent process
+
+    // Wait for all child processes to complete
+    for (i = 0; i < n; i++) {
+        wait(NULL);
     }
 
     free_pipe_commands(n, cmd);
-    
-    fflush(stdout);
-
-    return 1;
+    return 0;
 }
 
 int spawn_proc(int in, int out, struct pipe_command *cmd) {

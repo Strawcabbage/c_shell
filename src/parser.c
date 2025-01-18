@@ -159,7 +159,7 @@ struct pipe_command* initialize_commands(char **strs) {
         } else {
             
             arg_index = 0;
-    
+            
             for (int i = pipe_indexes[pipe_index] + 1; strs[i] != NULL; i++) {
 
                 commands[num_commands - 1].argv[arg_index] = strdup(strs[i]);
