@@ -1,3 +1,8 @@
+Description:
+
+  This is my own shell that I made in c. Its current functionality includes: basic commands such as ls, mkdir, and rm; built-in commands help, cd, exit, and history; piping; and I/O redirection. I have split up the program into multiple files based on how functions are   used with a header file called "shell.h". This program is compiled using the gcc compiler and a make file.
+
+
 Steps to run:
 
   1. Clone repository
