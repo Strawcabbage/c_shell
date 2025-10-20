@@ -55,13 +55,14 @@ char **csh_parse_line(char *linecopy) {
                    exit(EXIT_FAILURE);
                 }
             }
+
+            position++;
             
             
         }
 
         //Null terminating str before adding it to str again
         str = strtok(NULL, delims);
-        position++; 
         
     }
 

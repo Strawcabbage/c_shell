@@ -1,5 +1,7 @@
 #include "shell.h"
 
+static char *trim(char *s);
+
 void csh_loop(void) {
     
     char **args;
@@ -72,5 +74,63 @@ char *csh_read_line(void) {
     //Return buffer after getline() was used
     return buffer;
 
+}
+
+static char *trim(char *s) {
+    while (*s==' ' || *s=='\t') s++;
+    char *e = s + strlen(s);
+    while (e>s && (e[-1]==' ' || e[-1]=='\t')) --e;
+    *e = '\0';
+    return s;
+}
+
+int csh_run_command_string(const char *cmd) {
+    infile = NULL;
+    outfile = NULL;
+
+    char *work = strdup(cmd);
+    if (!work) { perror("strdup"); return 1; }
+
+    char *save = NULL;
+    char *seg  = strtok_r(work, ";", &save);
+    while (seg) {
+        char *linecopy = strdup(trim(seg));
+        if (!linecopy) { perror("strdup"); free(work); return 1; }
+        if (*linecopy) {
+            add_to_history(linecopy);
+            char **args = csh_parse_line(linecopy);
+            (void)csh_execute(args);     // sets last_status
+            free(args);
+        }
+        free(linecopy);
+        seg = strtok_r(NULL, ";", &save);
+        // reset redirections between commands
+        infile = NULL; outfile = NULL;
+    }
+
+    free(work);
+    return last_status;
+} 
+
+int csh_run_script_stream(FILE *fp, const char *name) {
+    (void)name; // unused for now; could be used for $0 in the future
+    char *linebuf = NULL;
+    size_t cap = 0;
+    int final_status = 0;
+
+    while (getline(&linebuf, &cap, fp) != -1) {
+        // Strip trailing newline (your csh_read_line does this)
+        linebuf[strcspn(linebuf, "\n")] = 0;
+        if (*linebuf == '\0') continue;
+        (void)csh_run_command_string(linebuf);
+        
+        final_status = last_status;
+    }
+    free(linebuf);
+    if (ferror(fp)) {
+        perror("read script");
+        return 2;
+    }
+    return final_status;
 }
 

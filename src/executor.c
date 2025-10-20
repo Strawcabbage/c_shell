@@ -64,7 +64,11 @@ int csh_launch(char **args) {
 
     } else {  
         do { 
+            
             wpid = waitpid(cpid, &status, WUNTRACED);
+            if (WIFEXITED(status)) last_status = WEXITSTATUS(status);
+            else if (WIFSIGNALED(status)) last_status = 128 + WTERMSIG(status);
+
         } while (!WIFEXITED(status) && !WIFSIGNALED(status));
         
         fflush(stdout);
@@ -83,17 +87,18 @@ int csh_launch(char **args) {
  * then returning a status after checking
 */
 int csh_execute(char **args) {
-    
+
     //If the argument entered is empty or failed, then the loop is restarted and input is received again
     if (args[0] == NULL || *args[0] == '\n') {
         return 1;
     }
  
     //Checkin whether the command is built in by looping through built_in_strs
-    for (int i = 0; i < (sizeof(built_in_strs) / sizeof(built_in_strs[0])); i++) {
+    for (int i = 0; i < NUM_BUILTINS; i++) {
         if (strcmp(args[0], built_in_strs[i]) == 0) {
             //The command has evaluated to be a built in command
-            return (*built_in_func[i])(args);
+            last_status = (*built_in_func[i])(args);
+            return 1;
         }
     }
     

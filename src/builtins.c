@@ -1,20 +1,23 @@
 #include "shell.h"
 
-int (*built_in_func[]) (char**) = {
+static int builtin_colon(char **argv);
+
+int (*built_in_func[NUM_BUILTINS]) (char**) = {
     &csh_exit,
     &csh_cd,
     &csh_help,
-    &csh_history
+    &csh_history,
+    &builtin_colon
 };
 
 //Built in function exit. This function exits the shell
-int csh_exit() {
+int csh_exit(char **argv) {
 
     return 0;
     
 }
 
-int csh_cd() {
+int csh_cd(char **argv) {
     
     char *rest_of_line;
     char *curr_dir = strdup(home_dir);
@@ -41,7 +44,7 @@ int csh_cd() {
             return 1;
         } else {
             free(curr_dir);
-            return 1;
+            return 0;
         }
         
     } else {
@@ -65,24 +68,26 @@ int csh_cd() {
         }
 
         free(curr_dir);
-        return 1;
+        return 0;
 
     }
 
 }
 
-int csh_help() {
+int csh_help(char **argv) {
     printf("Here are a list of the built in functions you can use:\n");
     for (int i = 0; i < (sizeof(built_in_strs) / sizeof(built_in_strs[0])); i++) {
         printf("  -  \"%s\"\n", built_in_strs[i]);
     }
-    return 1;
+    return 0;
 }
 
-int csh_history() {
+int csh_history(char **argv) {
     
     print_history();
 
-    return 1;
+    return 0;
 
 }
+
+static int builtin_colon(char **argv) { (void)argv; return 0; }
